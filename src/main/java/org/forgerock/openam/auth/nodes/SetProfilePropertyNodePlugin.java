@@ -11,44 +11,27 @@
  * Header, with the fields enclosed by brackets [] replaced by your own identifying
  * information: "Portions copyright [year] [name of copyright owner]".
  *
- * Copyright 2017 ForgeRock AS.
+ * Copyright 2017-2019 ForgeRock AS.
  */
 /*
  * jon.knight@forgerock.com
  *
  * Needed to register the node
  */
-
 package org.forgerock.openam.auth.nodes;
 
-import static java.util.Arrays.asList;
-import static org.forgerock.openam.core.realms.Realm.root;
+import static java.util.Collections.singleton;
+import static java.util.Collections.singletonMap;
 
-import javax.inject.Inject;
+import java.util.Map;
 
 import org.forgerock.openam.auth.node.api.AbstractNodeAmPlugin;
 import org.forgerock.openam.auth.node.api.Node;
-import org.forgerock.openam.plugins.PluginException;
-import org.forgerock.openam.sm.AnnotatedServiceRegistry;
-
-import com.iplanet.sso.SSOException;
-import com.sun.identity.sm.SMSException;
 
 /**
  * Core nodes installed by default with no engine dependencies.
  */
 public class SetProfilePropertyNodePlugin extends AbstractNodeAmPlugin {
-
-    private final AnnotatedServiceRegistry serviceRegistry;
-
-    /**
-     * DI-enabled constructor.
-     * @param serviceRegistry A service registry instance.
-     */
-    @Inject
-    public SetProfilePropertyNodePlugin(AnnotatedServiceRegistry serviceRegistry) {
-        this.serviceRegistry = serviceRegistry;
-    }
 
     @Override
     public String getPluginVersion() {
@@ -56,16 +39,7 @@ public class SetProfilePropertyNodePlugin extends AbstractNodeAmPlugin {
     }
 
     @Override
-    public void onStartup() throws PluginException {
-        for (Class<? extends Node> nodeClass : getNodes()) {
-            pluginTools.registerAuthNode(nodeClass);
-        }
-    }
-
-    @Override
-    protected Iterable<? extends Class<? extends Node>> getNodes() {
-        return asList(
-                SetProfilePropertyNode.class
-        );
+    protected Map<String, Iterable<? extends Class<? extends Node>>> getNodesByVersion() {
+        return singletonMap(getPluginVersion(), singleton(SetProfilePropertyNode.class));
     }
 }
