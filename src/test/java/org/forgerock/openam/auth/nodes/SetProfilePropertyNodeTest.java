@@ -78,9 +78,19 @@ public class SetProfilePropertyNodeTest {
         verify(identity).store();
     }
 
-    private TreeContext setupTreeContext() {
-        return new TreeContext(json(object(field(USERNAME, USER), field(REALM, REALM_NAME))),
-                new ExternalRequestContext.Builder().build(), emptyList());
+    @Test
+    public void shouldSaveTransientProperties() throws Exception {
+        given(config.transientProperties()).willReturn(ImmutableMap.of("badger", "transient"));
+        given(coreWrapper.getIdentity(USER, REALM_NAME)).willReturn(identity);
+
+        node.process(setupTreeContext());
+
+        verify(identity).setAttributes(singletonMap("badger", singleton("content")));
+        verify(identity).store();
     }
 
+    private TreeContext setupTreeContext() {
+        return new TreeContext(json(object(field(USERNAME, USER), field(REALM, REALM_NAME))),
+                json(object(field("transient", "content"))), new ExternalRequestContext.Builder().build(), emptyList());
+    }
 }
