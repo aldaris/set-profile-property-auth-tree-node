@@ -1,7 +1,7 @@
 /*
  * jon.knight@forgerock.com
  *
- * Sets user profile attributes 
+ * Sets user profile attributes
  *
  */
 
@@ -23,7 +23,8 @@
 package org.forgerock.openam.auth.nodes;
 
 import static java.util.Collections.singleton;
-import static org.forgerock.openam.auth.node.api.SharedStateConstants.*;
+import static org.forgerock.openam.auth.node.api.SharedStateConstants.REALM;
+import static org.forgerock.openam.auth.node.api.SharedStateConstants.USERNAME;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -33,7 +34,10 @@ import javax.inject.Inject;
 
 import org.apache.commons.lang.StringUtils;
 import org.forgerock.openam.annotations.sm.Attribute;
-import org.forgerock.openam.auth.node.api.*;
+import org.forgerock.openam.auth.node.api.Action;
+import org.forgerock.openam.auth.node.api.Node;
+import org.forgerock.openam.auth.node.api.SingleOutcomeNode;
+import org.forgerock.openam.auth.node.api.TreeContext;
 import org.forgerock.openam.core.CoreWrapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,7 +56,6 @@ public class SetProfilePropertyNode extends SingleOutcomeNode {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(SetProfilePropertyNode.class);
     private final CoreWrapper coreWrapper;
-    static final String USER_PASSWORD = "userPassword";
 
     /**
      * Configuration for the node.
@@ -64,6 +67,14 @@ public class SetProfilePropertyNode extends SingleOutcomeNode {
          */
         @Attribute(order = 100)
         Map<String, String> properties();
+
+        /**
+         * The mapping of profile attributes to transient state variables.
+         *
+         * @return The mapping between profile attributes and transient state variables.
+         */
+        @Attribute(order = 200)
+        Map<String, String> transientProperties();
     }
 
     private final Config config;
@@ -79,7 +90,7 @@ public class SetProfilePropertyNode extends SingleOutcomeNode {
     }
 
     @Override
-    public Action process(TreeContext context) throws NodeProcessException {
+    public Action process(TreeContext context) {
         String username = context.sharedState.get(USERNAME).asString();
         String realm = context.sharedState.get(REALM).asString();
         AMIdentity userIdentity = coreWrapper.getIdentity(username, realm);
@@ -95,15 +106,17 @@ public class SetProfilePropertyNode extends SingleOutcomeNode {
             } else if (context.sharedState.isDefined(propertyValue)) {
                 result = context.sharedState.get(propertyValue).asString();
             }
-            // Special case for password handling
-            else if (key.equals(USER_PASSWORD)) {
-                result = getUserPassword(context);
-            }
 
             if (StringUtils.isNotEmpty(result)) {
                 attributes.put(key, singleton(result));
             }
         }
+
+        config.transientProperties().forEach((key, value) -> {
+            if (context.transientState.isDefined(value)) {
+                attributes.put(key, singleton(context.transientState.get(value).asString()));
+            }
+        });
 
         try {
             userIdentity.setAttributes(attributes);
@@ -113,11 +126,5 @@ public class SetProfilePropertyNode extends SingleOutcomeNode {
         }
 
         return goToNext().build();
-    }
-
-
-    private String getUserPassword(TreeContext context) throws NodeProcessException {
-        return context.transientState.isDefined(PASSWORD)
-                ? context.transientState.get(PASSWORD).asString():"reallyRandomPassword!1232312432423532";
     }
 }
