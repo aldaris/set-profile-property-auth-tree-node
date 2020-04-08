@@ -22,10 +22,14 @@
  */
 package org.forgerock.openam.auth.nodes;
 
+import static java.util.Collections.emptyMap;
+import static java.util.Collections.singleton;
+import static java.util.Collections.singletonMap;
+import static org.apache.commons.collections.CollectionUtils.isEmpty;
+import static org.apache.commons.collections.CollectionUtils.isNotEmpty;
 import static org.forgerock.openam.auth.node.api.SharedStateConstants.REALM;
 import static org.forgerock.openam.auth.node.api.SharedStateConstants.USERNAME;
 
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -33,7 +37,6 @@ import java.util.Set;
 
 import javax.inject.Inject;
 
-import org.apache.commons.collections.CollectionUtils;
 import org.forgerock.json.JsonValue;
 import org.forgerock.openam.annotations.sm.Attribute;
 import org.forgerock.openam.auth.node.api.Action;
@@ -45,6 +48,7 @@ import org.forgerock.openam.core.CoreWrapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.common.collect.Sets;
 import com.google.inject.assistedinject.Assisted;
 import com.iplanet.sso.SSOException;
 import com.sun.identity.idm.AMIdentity;
@@ -109,7 +113,6 @@ public class SetProfilePropertyNode extends SingleOutcomeNode {
         String realm = context.sharedState.get(REALM).asString();
         AMIdentity userIdentity = coreWrapper.getIdentity(username, realm);
 
-
         Map<String, Set<String>> attributes = createAttributeMap(context, userIdentity);
 
         try {
@@ -122,20 +125,18 @@ public class SetProfilePropertyNode extends SingleOutcomeNode {
         return goToNext().build();
     }
 
+    @SuppressWarnings("unchecked")
     private Map<String, Set<String>> createAttributeMap(TreeContext context, AMIdentity userIdentity)
             throws NodeProcessException {
         Map<String, Set<String>> attributes = new HashMap<>();
         for (Map.Entry<String, String> entry : config.properties().entrySet()) {
-            addAttributeFromProperties(context.sharedState, attributes, entry);
+            attributes.putAll(convertToAttributes(context.sharedState, entry));
         }
         for (Map.Entry<String, String> entry : config.transientProperties().entrySet()) {
-            addAttributeFromProperties(context.transientState, attributes, entry);
+            attributes.putAll(convertToAttributes(context.transientState, entry));
         }
-        Set<String> combinedKeys = new HashSet<String>() {{
-            addAll(config.properties().keySet());
-            addAll(config.transientProperties().keySet());
-        }};
-        if (config.addAttributes() && !CollectionUtils.isEmpty(combinedKeys)) {
+        Set<String> combinedKeys = Sets.union(config.properties().keySet(), config.transientProperties().keySet());
+        if (config.addAttributes() && isNotEmpty(combinedKeys)) {
             Map<String, Set<String>> oldAttributesMap;
             try {
                 oldAttributesMap = userIdentity.getAttributes(combinedKeys);
@@ -144,39 +145,33 @@ public class SetProfilePropertyNode extends SingleOutcomeNode {
                 throw new NodeProcessException("Unable to retrieve attributes for keys");
             }
 
-            //Because oldAttributesMap is a CaseInsensitiveHashMap, need to cast the entry set to the correct type
-            for (Object obj : oldAttributesMap.entrySet()) {
-                Map.Entry<String, Set<String>> entry = (Map.Entry<String, Set<String>>) obj;
-                attributes.merge(entry.getKey(), entry.getValue(), (v1, v2) -> new HashSet<String>() {{
-                    addAll(v1);
-                    addAll(v2);
-                }});
-
+            for (Map.Entry<String, Set<String>> entry : oldAttributesMap.entrySet()) {
+                attributes.merge(entry.getKey(), entry.getValue(), Sets::union);
             }
         }
         return attributes;
     }
 
-    private void addAttributeFromProperties(JsonValue state, Map<String, Set<String>> attributes,
-                                            Map.Entry<String, String> entry) {
+    private Map<String, Set<String>> convertToAttributes(JsonValue state, Map.Entry<String, String> entry) {
         String key = entry.getKey();
         String propertyValue = entry.getValue();
 
         Set<String> result = null;
         if (propertyValue.startsWith("\"")) {
-            result = Collections.singleton(propertyValue.substring(1, propertyValue.length() - 1));
+            result = singleton(propertyValue.substring(1, propertyValue.length() - 1));
         } else if (state.isDefined(propertyValue)) {
             JsonValue value = state.get(propertyValue);
             if (value.isList()) {
                 result = new HashSet<>(state.get(propertyValue).asList(String.class));
             } else {
-                result = Collections.singleton(state.get(propertyValue).asString());
+                result = singleton(state.get(propertyValue).asString());
             }
         }
 
-        if (!CollectionUtils.isEmpty(result)) {
-            attributes.put(key, result);
+        if (isEmpty(result)) {
+            return emptyMap();
+        } else {
+            return singletonMap(key, result);
         }
     }
-
 }
